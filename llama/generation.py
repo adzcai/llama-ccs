@@ -1,9 +1,10 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed according to the terms of the GNU General Public License version 3.
 
-from typing import List
+from typing import List, Optional
 
 import torch
+import numpy as np
 
 from llama.tokenizer import Tokenizer
 from llama.model import Transformer
@@ -20,12 +21,16 @@ class LLaMA:
         max_gen_len: int,
         temperature: float = 0.8,
         top_p: float = 0.95,
+        return_activations: Optional[bool] = False,
     ) -> List[str]:
         bsz = len(prompts)
         params = self.model.params
         assert bsz <= params.max_batch_size, (bsz, params.max_batch_size)
 
         prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=False) for x in prompts]
+        if return_activations:
+            prompt_lengths = np.array([len(t) for t in prompt_tokens])
+            all_hidden_activations = np.empty((bsz, params.n_layers + 1, params.dim))
 
         min_prompt_size = min([len(t) for t in prompt_tokens])
         max_prompt_size = max([len(t) for t in prompt_tokens])
@@ -39,7 +44,12 @@ class LLaMA:
         start_pos = min_prompt_size
         prev_pos = 0
         for cur_pos in range(start_pos, total_len):
-            logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
+            logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos, return_activations=return_activations)
+            if return_activations:
+                logits, activations = logits
+                finished_idx, = (prompt_lengths == cur_pos).nonzero()
+                all_hidden_activations[finished_idx] = activations[finished_idx, :, -1, :].detach().cpu().numpy()
+
             if temperature > 0:
                 probs = torch.softmax(logits / temperature, dim=-1)
                 next_token = sample_top_p(probs, top_p)
@@ -63,6 +73,8 @@ class LLaMA:
             except ValueError:
                 pass
             decoded.append(self.tokenizer.decode(t))
+        if return_activations:
+            return decoded, all_hidden_activations
         return decoded
 
 

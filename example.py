@@ -1,13 +1,14 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed according to the terms of the GNU General Public License version 3.
 
-from typing import Tuple
+from typing import Optional, Tuple
 import os
 import sys
 import torch
 import fire
 import time
 import json
+import numpy as np
 
 from pathlib import Path
 
@@ -70,6 +71,7 @@ def main(
     top_p: float = 0.95,
     max_seq_len: int = 512,
     max_batch_size: int = 32,
+    save_activations_path: Optional[str] = None,
 ):
     local_rank, world_size = setup_model_parallel()
     if local_rank > 0:
@@ -107,8 +109,13 @@ plush girafe => girafe peluche
 cheese =>""",
     ]
     results = generator.generate(
-        prompts, max_gen_len=256, temperature=temperature, top_p=top_p
+        prompts, max_gen_len=256, temperature=temperature, top_p=top_p, return_activations=save_activations_path is not None
     )
+
+    if save_activations_path is not None:
+        results, activations = results
+        np.save(save_activations_path, activations)
+        print(f"Saved activations to {save_activations_path}")
 
     for result in results:
         print(result)

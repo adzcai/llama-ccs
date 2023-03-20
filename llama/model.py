@@ -220,7 +220,11 @@ class Transformer(nn.Module):
         )
 
     @torch.inference_mode()
-    def forward(self, tokens: torch.Tensor, start_pos: int):
+    def forward(self, tokens: torch.Tensor, start_pos: int, return_activations: Optional[bool] = False):
+        """
+        If return_activations is True, returns a (bsz, n_layers + 1, seqlen, dim)
+        Tensor of activations for each layer. Includes the token embeddings.
+        """
         _bsz, seqlen = tokens.shape
         h = self.tok_embeddings(tokens)
         self.freqs_cis = self.freqs_cis.to(h.device)
@@ -231,8 +235,16 @@ class Transformer(nn.Module):
             mask = torch.full((1, 1, seqlen, seqlen), float("-inf"), device=tokens.device)
             mask = torch.triu(mask, diagonal=start_pos + 1).type_as(h)
 
+        if return_activations:
+            activations = [h]
+
         for layer in self.layers:
             h = layer(h, start_pos, freqs_cis, mask)
+            if return_activations:
+                activations.append(h)
+
         h = self.norm(h)
         output = self.output(h[:, -1, :])  # only compute last logits
+        if return_activations:
+            return output.float(), torch.stack(activations).transpose(0, 1)
         return output.float()
