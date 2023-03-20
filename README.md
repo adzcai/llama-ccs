@@ -1,29 +1,27 @@
-# LLaMA 
+# LLaMA-CCS
 
-This repository is intended as a minimal, hackable and readable example to load [LLaMA](https://ai.facebook.com/blog/large-language-model-llama-meta-ai/) ([arXiv](https://arxiv.org/abs/2302.13971v1)) models and run inference.
-In order to download the checkpoints and tokenizer, fill this [google form](https://forms.gle/jk851eBVbX1m5TAv5)
+A lightly modified version of [facebookresearch/llama](https://github.com/facebookresearch/llama) that allows for saving the intermediate activations in order to run CCS.
+
+Some experiments for [CS 229br Foundations of Deep Learning](https://boazbk.github.io/mltheoryseminar/) as taught in Spring 2023 at Harvard University by Boaz Barak (and teaching fellows Gustaf Ahdritz and Gal Kaplun).
 
 ## Setup
 
-In a conda env with pytorch / cuda available, run:
+Make sure you have CUDA available.
+
 ```
 pip install -r requirements.txt
 ```
-Then in this repository:
+
+To generate the BoolQ prompts, run
+
 ```
-pip install -e .
+python generate_dataset.py ./data/boolq/prompts.csv --tokenizer_path $TARGET_FOLDER/tokenizer.model
 ```
 
-## Download
+To evaluate a LLaMA model on the saved dataset, set the variables accordingly and run
 
-Once your request is approved, you will receive links to download the tokenizer and model files.
-Edit the `download.sh` script with the signed url provided in the email to download the model weights and tokenizer.
-
-## Inference
-
-The provided `example.py` can be run on a single or multi-gpu node with `torchrun` and will output completions for two pre-defined prompts. Using `TARGET_FOLDER` as defined in `download.sh`:
 ```
-torchrun --nproc_per_node MP example.py --ckpt_dir $TARGET_FOLDER/model_size --tokenizer_path $TARGET_FOLDER/tokenizer.model
+torchrun --nproc_per_node $MP example.py --ckpt_dir $TARGET_FOLDER/$MODEL_SIZE --tokenizer_path $TARGET_FOLDER/tokenizer.model --save_activations_path ./data/boolq --prompt_csv ./data/prompts.csv
 ```
 
 Different models require different MP values:
@@ -35,28 +33,16 @@ Different models require different MP values:
 | 33B    | 4  |
 | 65B    | 8  |
 
-## FAQ
+## Related resources
 
-- [1. The download.sh script doesn't work on default bash in MacOS X](FAQ.md#1)
-- [2. Generations are bad!](FAQ.md#2)
-- [3. CUDA Out of memory errors](FAQ.md#3)
-- [4. Other languages](FAQ.md#4)
+[Discovering Latent Knowledge, in Language Models Without Supervision](https://arxiv.org/abs/2212.03827): The original paper by Collin Burns and Haotian Ye et al that proposes "Contrast-Consistent Search" (CCS).
+- [collin-burns/discovering_latent_knowledge](https://github.com/collin-burns/discovering_latent_knowledge): The corresponding repository.
+  - This is claimed to be quite buggy. See [Bugs of the Initial Release of CCS](https://docs.google.com/document/d/16Q8ZJFloA-x2lR65hs80rbbjX70TteCSMhuDQGcC75Q/edit?usp=sharing) by Fabien Roger.
+- [How "Discovering Latent Knowledge in Language Models Without Supervision" Fits Into a Broader Alignment Scheme](https://www.lesswrong.com/posts/L4anhrxjv8j2yRKKp/how-discovering-latent-knowledge-in-language-models-without)
 
-## Reference
+[What Discovering Latent Knowledge Did and Did Not Find](https://www.lesswrong.com/posts/bWxNPMy5MhPnQTzKz/what-discovering-latent-knowledge-did-and-did-not-find-4): A writeup by Fabien Roger on takeaways from the original paper.
 
-LLaMA: Open and Efficient Foundation Language Models -- https://arxiv.org/abs/2302.13971
+- [safer-ai/Exhaustive-CCS](https://github.com/safer-ai/Exhaustive-CCS): The corresponding repository. Similar to Collin Burns's but with fewer bugs.
+- [Several experiments with CCS.](https://docs.google.com/document/d/1LCjjnUPN51gHl_rmCWEmmtbY-Wu1dixzOif14e-7i-U/edit)
 
-```
-@article{touvron2023llama,
-  title={LLaMA: Open and Efficient Foundation Language Models},
-  author={Touvron, Hugo and Lavril, Thibaut and Izacard, Gautier and Martinet, Xavier and Lachaux, Marie-Anne and Lacroix, Timoth{\'e}e and Rozi{\`e}re, Baptiste and Goyal, Naman and Hambro, Eric and Azhar, Faisal and Rodriguez, Aurelien and Joulin, Armand and Grave, Edouard and Lample, Guillaume},
-  journal={arXiv preprint arXiv:2302.13971},
-  year={2023}
-}
-```
-
-## Model Card
-See [MODEL_CARD.md](MODEL_CARD.md)
-
-## License
-See the [LICENSE](LICENSE) file.
+[EleutherAI/elk](https://github.com/EleutherAI/elk): Contains many further innovations on top of CCS.
