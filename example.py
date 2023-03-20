@@ -9,6 +9,8 @@ import fire
 import time
 import json
 import numpy as np
+import pandas as pd
+from tqdm import trange
 
 from pathlib import Path
 
@@ -64,6 +66,44 @@ def load(
     return generator
 
 
+def run_csv(
+    generator: LLaMA,
+    csv_path: str,
+    save_activations_path: str,
+    max_batch_size: int,
+    temperature: float,
+    top_p: float,
+):
+    prompt_df = pd.read_csv(csv_path, index_col=0)
+
+    # create save directories
+    save_dir = Path(save_activations_path)
+    plus_dir = save_dir / "plus"
+    minus_dir = save_dir / "minus"
+    plus_dir.mkdir(parents=True, exist_ok=True)
+    minus_dir.mkdir(parents=True, exist_ok=True)
+
+    bsz = max_batch_size // 2
+    for i in trange(0, len(prompt_df), bsz):
+        idx = prompt_df.index[i : i + bsz]
+        plus_prompts, minus_prompts = [
+            prompt_df[col].loc[idx].tolist() for col in ["plus_prompt", "minus_prompt"]
+        ]
+
+        _, activations = generator.generate(
+            plus_prompts + minus_prompts,
+            max_gen_len=1,
+            temperature=temperature,
+            top_p=top_p,
+            return_activations=True,
+        )
+
+        plus_activations, minus_activations = np.split(activations, 2, axis=0)
+        for j, (plus, minus) in enumerate(zip(plus_activations, minus_activations)):
+            np.save(plus_dir / f"{idx[j]}", plus)
+            np.save(minus_dir / f"{idx[j]}", minus)
+
+
 def main(
     ckpt_dir: str,
     tokenizer_path: str,
@@ -72,6 +112,7 @@ def main(
     max_seq_len: int = 512,
     max_batch_size: int = 32,
     save_activations_path: Optional[str] = None,
+    prompt_csv: Optional[str] = None,
 ):
     local_rank, world_size = setup_model_parallel()
     if local_rank > 0:
@@ -81,35 +122,27 @@ def main(
         ckpt_dir, tokenizer_path, local_rank, world_size, max_seq_len, max_batch_size
     )
 
+    if prompt_csv is not None:
+        run_csv(
+            generator,
+            prompt_csv,
+            save_activations_path,
+            max_batch_size,
+            temperature,
+            top_p,
+        )
+        return
+
     prompts = [
-        # For these prompts, the expected answer is the natural continuation of the prompt
-        "I believe the meaning of life is",
-        "Simply put, the theory of relativity states that ",
-        "Building a website can be done in 10 simple steps:\n",
-        # Few shot prompts: https://huggingface.co/blog/few-shot-learning-gpt-neo-and-inference-api
-        """Tweet: "I hate it when my phone battery dies."
-Sentiment: Negative
-###
-Tweet: "My day has been 👍"
-Sentiment: Positive
-###
-Tweet: "This is the link to the article"
-Sentiment: Neutral
-###
-Tweet: "This new music video was incredibile"
-Sentiment:""",
-        """Translate English to French:
-
-sea otter => loutre de mer
-
-peppermint => menthe poivrée
-
-plush girafe => girafe peluche
-
-cheese =>""",
+'Persian (/ˈpɜːrʒən, -ʃən/), also known by its endonym Farsi (فارسی fārsi (fɒːɾˈsiː) ( listen)), is one of the Western Iranian languages within the Indo-Iranian branch of the Indo-European language family. It is primarily spoken in Iran, Afghanistan (officially known as Dari since 1958), and Tajikistan (officially known as Tajiki since the Soviet era), and some other regions which historically were Persianate societies and considered part of Greater Iran. It is written in the Persian alphabet, a modified variant of the Arabic script, which itself evolved from the Aramaic alphabet.\n\nAfter reading this passage, I have a question: do iran and afghanistan speak the same language?\n\nTrue or False: True',
+'Persian (/ˈpɜːrʒən, -ʃən/), also known by its endonym Farsi (فارسی fārsi (fɒːɾˈsiː) ( listen)), is one of the Western Iranian languages within the Indo-Iranian branch of the Indo-European language family. It is primarily spoken in Iran, Afghanistan (officially known as Dari since 1958), and Tajikistan (officially known as Tajiki since the Soviet era), and some other regions which historically were Persianate societies and considered part of Greater Iran. It is written in the Persian alphabet, a modified variant of the Arabic script, which itself evolved from the Aramaic alphabet.\n\nAfter reading this passage, I have a question: do iran and afghanistan speak the same language?\n\nTrue or False: False'
     ]
     results = generator.generate(
-        prompts, max_gen_len=256, temperature=temperature, top_p=top_p, return_activations=save_activations_path is not None
+        prompts,
+        max_gen_len=256,
+        temperature=temperature,
+        top_p=top_p,
+        return_activations=save_activations_path is not None,
     )
 
     if save_activations_path is not None:
