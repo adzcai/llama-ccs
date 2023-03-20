@@ -60,6 +60,7 @@ def load(
     model = Transformer(model_args)
     torch.set_default_tensor_type(torch.FloatTensor)
     model.load_state_dict(checkpoint, strict=False)
+    model.eval()
 
     generator = LLaMA(model, tokenizer)
     print(f"Loaded in {time.time() - start_time:.2f} seconds")
@@ -102,7 +103,6 @@ def run_csv(
         for j, (plus, minus) in enumerate(zip(plus_activations, minus_activations)):
             np.save(plus_dir / f"{idx[j]}", plus)
             np.save(minus_dir / f"{idx[j]}", minus)
-
 
 def main(
     ckpt_dir: str,
